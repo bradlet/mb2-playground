@@ -14,7 +14,6 @@ use microbit::{
 		pac::{self, TIMER1, interrupt},
 		prelude::*,
 		Timer,
-		delay::Delay,
 		gpio::Level,
 	},
 };
@@ -26,7 +25,7 @@ use critical_section_lock_mut::LockMut;
 static DISPLAY: LockMut<Display<TIMER1>> = LockMut::new();
 
 const BASE_FREQ: u16 = 100u16;
-const OFFSET_TURN_AT: u16 = 250u16;
+const OFFSET_TURN_AT: u16 = 100u16;
 
 #[entry]
 fn main() -> ! {
@@ -37,11 +36,8 @@ fn main() -> ! {
 	let display = Display::new(board.TIMER1, board.display_pins);
 	DISPLAY.init(display);
 
-	let mut delay = Delay::new(board.SYST);
     let mut speaker = board.speaker_pin.into_push_pull_output(Level::Low);
     let button = board.buttons.button_a;
-
-	let mut count = 0u16;
 
 	let mut increasing = true;
 	let mut off_set = 0u16;
@@ -81,19 +77,8 @@ fn main() -> ! {
 			} else if off_set == OFFSET_TURN_AT && increasing {
 				increasing = false;
 			}
-
-			// DISPLAY.with_lock(|display| display.show(&image));
-			// timer.delay_ms(2000u32);
 		};
 		DISPLAY.with_lock(|display| display.clear());
-		// count += 1;
-		// rprintln!("After A process {}", count);
-		// DISPLAY.with_lock(|display| display.clear());
-		// DISPLAY.with_lock(|display| display.show(&image));
-		// timer.delay_ms(2000u32);
-
-		// DISPLAY.with_lock(|display| display.clear());
-		// timer.delay_ms(2000u32);
 	}
 }
 
