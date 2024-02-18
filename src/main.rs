@@ -69,6 +69,12 @@ fn main() -> ! {
     ]);
 
 	loop {
+		// https://crates.io/crates/lsm303agr/0.3.0
+		if sensor.accel_status().unwrap().xyz_new_data() {
+            let data = sensor.acceleration().unwrap();
+			let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
+            rprintln!("Linear acceleration: {}", linear_acceleration_sq);
+        }
 		if button.is_low().unwrap() {
 			DISPLAY.with_lock(|display| display.show(&image));
 			speaker.set_high().unwrap();
