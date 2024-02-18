@@ -6,6 +6,7 @@
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
 
+use lsm303agr::{AccelMode, AccelOutputDataRate, Lsm303agr};
 use cortex_m_rt::entry;
 use microbit::{
 	board::Board,
@@ -15,7 +16,9 @@ use microbit::{
 		prelude::*,
 		Timer,
 		gpio::Level,
+		twim,
 	},
+	pac::twim0::frequency::FREQUENCY_A
 };
 
 use critical_section_lock_mut::LockMut;
@@ -33,10 +36,18 @@ fn main() -> ! {
 
     let mut board = Board::take().unwrap();
 	let mut timer = Timer::new(board.TIMER0);
+
 	let display = Display::new(board.TIMER1, board.display_pins);
 	DISPLAY.init(display);
 
     let mut speaker = board.speaker_pin.into_push_pull_output(Level::Low);
+
+	// https://docs.rust-embedded.org/discovery/microbit/08-i2c/using-a-driver.html
+	let i2c = { twim::Twim::new(board.TWIM0, board.i2c_internal.into(), FREQUENCY_A::K100) };
+	let mut sensor = Lsm303agr::new_with_i2c(i2c);
+	sensor.init().unwrap();
+	sensor.set_accel_mode_and_odr(&mut timer, AccelMode::Normal, AccelOutputDataRate::Hz50).unwrap();
+
     let button = board.buttons.button_a;
 
 	let mut increasing = true;
