@@ -25,6 +25,9 @@ use critical_section_lock_mut::LockMut;
 /// interrupt handler.
 static DISPLAY: LockMut<Display<TIMER1>> = LockMut::new();
 
+const BASE_FREQ: u16 = 100u16;
+const OFFSET_TURN_AT: u16 = 250u16;
+
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
@@ -39,6 +42,9 @@ fn main() -> ! {
     let button = board.buttons.button_a;
 
 	let mut count = 0u16;
+
+	let mut increasing = true;
+	let mut off_set = 0u16;
 
 	unsafe {
         board.NVIC.set_priority(pac::Interrupt::TIMER1, 128);
@@ -60,10 +66,22 @@ fn main() -> ! {
 			DISPLAY.with_lock(|display| display.show(&image));
 			speaker.set_high().unwrap();
 			rprintln!("HIGH");
-			timer.delay_us(3_000u16);
+			timer.delay_us(BASE_FREQ + off_set);
             speaker.set_low().unwrap();
 			rprintln!("LOW");
-            timer.delay_us(3_000u16);
+            timer.delay_us(BASE_FREQ + off_set);
+			// Add offset so my scream can waver.
+			if increasing {
+				off_set += 1;
+			} else {
+				off_set -= 1;
+			}
+			if off_set == 0 && !increasing {
+				increasing = true;
+			} else if off_set == OFFSET_TURN_AT && increasing {
+				increasing = false;
+			}
+
 			// DISPLAY.with_lock(|display| display.show(&image));
 			// timer.delay_ms(2000u32);
 		};
