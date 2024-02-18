@@ -14,6 +14,8 @@ use microbit::{
 		pac::{self, TIMER1, interrupt},
 		prelude::*,
 		Timer,
+		delay::Delay,
+		gpio::Level,
 	},
 };
 
@@ -32,6 +34,10 @@ fn main() -> ! {
 	let display = Display::new(board.TIMER1, board.display_pins);
 	DISPLAY.init(display);
 
+	let mut delay = Delay::new(board.SYST);
+    let mut speaker = board.speaker_pin.into_push_pull_output(Level::Low);
+    let button = board.buttons.button_a;
+
 	unsafe {
         board.NVIC.set_priority(pac::Interrupt::TIMER1, 128);
         pac::NVIC::unmask(pac::Interrupt::TIMER1);
@@ -48,11 +54,19 @@ fn main() -> ! {
     ]);
 
 	loop {
-		DISPLAY.with_lock(|display| display.show(&image));
-		timer.delay_ms(1000u32);
+		if button.is_low().unwrap() {
+			speaker.set_high().unwrap();
+			rprintln!("HIGH");
+			delay.delay_us(3_000u16);
+            speaker.set_low().unwrap();
+			rprintln!("LOW");
+            delay.delay_us(3_000u16);
+		};
+		// DISPLAY.with_lock(|display| display.show(&image));
+		// timer.delay_ms(2000u32);
 
-		DISPLAY.with_lock(|display| display.clear());
-		timer.delay_ms(1000u32);
+		// DISPLAY.with_lock(|display| display.clear());
+		// timer.delay_ms(2000u32);
 	}
 }
 
