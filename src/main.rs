@@ -38,6 +38,8 @@ fn main() -> ! {
     let mut speaker = board.speaker_pin.into_push_pull_output(Level::Low);
     let button = board.buttons.button_a;
 
+	let mut count = 0u16;
+
 	unsafe {
         board.NVIC.set_priority(pac::Interrupt::TIMER1, 128);
         pac::NVIC::unmask(pac::Interrupt::TIMER1);
@@ -46,22 +48,29 @@ fn main() -> ! {
 	rprintln!("Starting...");
 
 	let image = GreyscaleImage::new(&[
-        [0, 4, 0, 4, 0],
-        [7, 3, 7, 3, 7],
-        [7, 2, 2, 2, 7],
-        [0, 7, 2, 7, 0],
-        [0, 0, 7, 0, 0],
+        [0, 1, 9, 1, 0],
+        [0, 1, 9, 1, 0],
+        [0, 1, 9, 1, 0],
+        [0, 1, 1, 1, 0],
+        [0, 0, 9, 0, 0],
     ]);
 
 	loop {
 		if button.is_low().unwrap() {
+			DISPLAY.with_lock(|display| display.show(&image));
 			speaker.set_high().unwrap();
 			rprintln!("HIGH");
-			delay.delay_us(3_000u16);
+			timer.delay_us(3_000u16);
             speaker.set_low().unwrap();
 			rprintln!("LOW");
-            delay.delay_us(3_000u16);
+            timer.delay_us(3_000u16);
+			// DISPLAY.with_lock(|display| display.show(&image));
+			// timer.delay_ms(2000u32);
 		};
+		DISPLAY.with_lock(|display| display.clear());
+		// count += 1;
+		// rprintln!("After A process {}", count);
+		// DISPLAY.with_lock(|display| display.clear());
 		// DISPLAY.with_lock(|display| display.show(&image));
 		// timer.delay_ms(2000u32);
 
