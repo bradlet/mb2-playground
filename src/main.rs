@@ -10,7 +10,7 @@ use lsm303agr::{AccelMode, AccelOutputDataRate, Lsm303agr};
 use cortex_m_rt::entry;
 use microbit::{
 	board::Board,
-	display::nonblocking::{Display, GreyscaleImage},
+	display::nonblocking::Display,
 	hal::{
 		pac::{self, TIMER1, interrupt},
 		prelude::*,
@@ -22,6 +22,8 @@ use microbit::{
 };
 
 use critical_section_lock_mut::LockMut;
+
+use mb2_playground::*;
 
 /// The display is shared by the main program and the
 /// interrupt handler.
@@ -50,9 +52,6 @@ fn main() -> ! {
 
     let button = board.buttons.button_a;
 
-	let mut increasing = true;
-	let mut off_set = 0u16;
-
 	unsafe {
         board.NVIC.set_priority(pac::Interrupt::TIMER1, 128);
         pac::NVIC::unmask(pac::Interrupt::TIMER1);
@@ -60,40 +59,25 @@ fn main() -> ! {
 	
 	rprintln!("Starting...");
 
-	let image = GreyscaleImage::new(&[
-        [0, 1, 9, 1, 0],
-        [0, 1, 9, 1, 0],
-        [0, 1, 9, 1, 0],
-        [0, 1, 1, 1, 0],
-        [0, 0, 9, 0, 0],
-    ]);
+	let image = get_default_grayscale_image();
 
 	loop {
 		// https://crates.io/crates/lsm303agr/0.3.0
 		if sensor.accel_status().unwrap().xyz_new_data() {
             let data = sensor.acceleration().unwrap();
-			let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
-            rprintln!("Linear acceleration: {}", linear_acceleration_sq);
+			// Acceleration in milli-g
+			rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
+			// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
+            // rprintln!("Linear acceleration: {}", linear_acceleration_sq);
         }
 		if button.is_low().unwrap() {
 			DISPLAY.with_lock(|display| display.show(&image));
 			speaker.set_high().unwrap();
 			rprintln!("HIGH");
-			timer.delay_us(BASE_FREQ + off_set);
+			timer.delay_us(BASE_FREQ);
             speaker.set_low().unwrap();
 			rprintln!("LOW");
-            timer.delay_us(BASE_FREQ + off_set);
-			// Add offset so my scream can waver.
-			if increasing {
-				off_set += 1;
-			} else {
-				off_set -= 1;
-			}
-			if off_set == 0 && !increasing {
-				increasing = true;
-			} else if off_set == OFFSET_TURN_AT && increasing {
-				increasing = false;
-			}
+            timer.delay_us(BASE_FREQ);
 		};
 		DISPLAY.with_lock(|display| display.clear());
 	}
