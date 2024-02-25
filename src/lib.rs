@@ -22,14 +22,10 @@ pub const BASE_FREQ: u16 = 50u16;
 state_machine! {
     derive(Debug)
     repr_c(true)
-    FallingState(Still)
+    pub FallingState(Still)
 
-    Still(Fall) => Falling,
-    Falling(Stop) => Recovering,
-    Recovering => {
-        Stop => Still,
-        Fall => Falling,
-    }
+    Still(Fall) => Falling [Fall],
+	Falling(Stop) => Still [Stop],
 }
 
 pub fn get_default_grayscale_image() -> GreyscaleImage {
@@ -38,7 +34,7 @@ pub fn get_default_grayscale_image() -> GreyscaleImage {
 		[0, 1, 9, 1, 0],
 		[0, 1, 9, 1, 0],
 		[0, 1, 1, 1, 0],
-		[0, 0, 9, 0, 0],
+		[0, 1, 9, 1, 0],
 	])
 }
 

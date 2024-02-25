@@ -47,12 +47,15 @@ fn main() -> ! {
 	sensor.init().unwrap();
 	sensor.set_accel_mode_and_odr(&mut timer, AccelMode::Normal, AccelOutputDataRate::Hz50).unwrap();
 
-    let button = board.buttons.button_a;
+    let button = board.buttons.button_a; // TODO remove
 
 	unsafe {
         board.NVIC.set_priority(pac::Interrupt::TIMER1, 128);
         pac::NVIC::unmask(pac::Interrupt::TIMER1);
     }
+
+	let mut last_state = &FallingStateState::Still;
+	let mut machine: StateMachine<FallingState> = StateMachine::new();
 	
 	rprintln!("Starting...");
 
@@ -60,18 +63,37 @@ fn main() -> ! {
 
 	loop {
 		// https://crates.io/crates/lsm303agr/0.3.0
-		if sensor.accel_status().unwrap().xyz_new_data() {
-            let data = sensor.acceleration().unwrap();
-			// Acceleration in milli-g
-			rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
-			// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
-            // rprintln!("Linear acceleration: {}", linear_acceleration_sq);
-        }
-		if button.is_low().unwrap() {
-			DISPLAY.with_lock(|display| display.show(&image));
-			make_sin_wave(&mut speaker, &mut timer);
+		// let transition = if sensor.accel_status().unwrap().xyz_new_data() {
+        //     let data = sensor.acceleration().unwrap();
+		// 	// Acceleration in milli-g
+		// 	rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
+		// 	// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
+        //     // rprintln!("Linear acceleration: {}", linear_acceleration_sq);
+		// 	FallingStateInput::Fall
+        // } else {
+		// 	FallingStateInput::Stop
+		// };
+
+		let transition = if button.is_low().unwrap() {
+			FallingStateInput::Fall
+		} else {
+			FallingStateInput::Stop
 		};
-		DISPLAY.with_lock(|display| display.clear());
+
+		match machine.consume(&transition) {
+			Ok(Some(reaction)) => {
+				match reaction {
+					FallingStateOutput::Fall => {
+						DISPLAY.with_lock(|display| display.show(&image));
+						// make_sin_wave(&mut speaker, &mut timer);
+					}
+					FallingStateOutput::Stop => {
+						DISPLAY.with_lock(|display| display.clear());
+					}
+				}
+			}
+			_ => { /* Do nothing */}
+		}
 	}
 }
 
