@@ -29,9 +29,6 @@ use mb2_playground::*;
 /// interrupt handler.
 static DISPLAY: LockMut<Display<TIMER1>> = LockMut::new();
 
-const BASE_FREQ: u16 = 100u16;
-const OFFSET_TURN_AT: u16 = 100u16;
-
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
@@ -72,12 +69,7 @@ fn main() -> ! {
         }
 		if button.is_low().unwrap() {
 			DISPLAY.with_lock(|display| display.show(&image));
-			speaker.set_high().unwrap();
-			rprintln!("HIGH");
-			timer.delay_us(BASE_FREQ);
-            speaker.set_low().unwrap();
-			rprintln!("LOW");
-            timer.delay_us(BASE_FREQ);
+			make_sin_wave(&mut speaker, &mut timer);
 		};
 		DISPLAY.with_lock(|display| display.clear());
 	}
