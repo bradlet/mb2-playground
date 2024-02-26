@@ -17,7 +17,9 @@ use rtt_target::rprintln;
 
 pub use rust_fsm::*;
 
-pub const BASE_FREQ: u16 = 50u16;
+pub const TICK: u32 = 64;
+pub const BASE_FREQ: u32 = 100;
+pub const DUTY: u32 = 25;
 
 state_machine! {
     derive(Debug)
