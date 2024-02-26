@@ -13,7 +13,7 @@ use lsm303agr::{AccelMode, AccelOutputDataRate, Lsm303agr};
 use cortex_m_rt::entry;
 use microbit::{
 	board::Board, display::nonblocking::Display, hal::{
-		gpio::Level, pac::{self, interrupt, TIMER1}, prelude::*, pwm, rtc::RtcInterrupt, time::Hertz, twim, Clocks, Rtc, Timer
+		gpio::Level, pac::{self, interrupt, TIMER1}, prelude::*, pwm, time::Hertz, twim, Clocks, Timer
 	}, pac::twim0::frequency::FREQUENCY_A
 };
 
@@ -24,10 +24,7 @@ use mb2_playground::*;
 /// The display is shared by the main program and the
 /// interrupt handler.
 static DISPLAY: LockMut<Display<TIMER1>> = LockMut::new();
-static RTC: Mutex<RefCell<Option<Rtc<pac::RTC0>>>> = Mutex::new(RefCell::new(None));
 static SPEAKER: Mutex<RefCell<Option<pwm::Pwm<pac::PWM0>>>> = Mutex::new(RefCell::new(None));
-
-static mut FALLING: bool = false;
 
 #[entry]
 fn main() -> ! {
@@ -66,14 +63,6 @@ fn main() -> ! {
             .set_lfclk_src_synth()
             .start_lfclk();
 
-        // Set up ticks: TICK = 32768 / (d + 1), so d = 32768 / TICK - 1.
-        let mut rtc = Rtc::new(board.RTC0, 32768 / TICK - 1).unwrap();
-        rtc.enable_counter();
-        rtc.enable_interrupt(RtcInterrupt::Tick, Some(&mut board.NVIC));
-        rtc.enable_event(RtcInterrupt::Tick);
-
-        *RTC.borrow(cs).borrow_mut() = Some(rtc);
-
         let mut speaker_pin = board.speaker_pin.into_push_pull_output(Level::High);
         speaker_pin.set_low().unwrap();
 
@@ -91,26 +80,20 @@ fn main() -> ! {
 			.disable();
 
         *SPEAKER.borrow(cs).borrow_mut() = Some(speaker);
-
-        // Configure RTC interrupt
-        unsafe {
-            pac::NVIC::unmask(pac::Interrupt::RTC0);
-        }
-        pac::NVIC::unpend(pac::Interrupt::RTC0);
     });
 
 	loop {
 		// https://crates.io/crates/lsm303agr/0.3.0
-		let transition = if sensor.accel_status().unwrap().xyz_new_data() {
-            let data = sensor.acceleration().unwrap();
-			// Acceleration in milli-g
-			rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
-			// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
+		// let transition = if sensor.accel_status().unwrap().xyz_new_data() {
+        //     let data = sensor.acceleration().unwrap();
+		// 	// Acceleration in milli-g
+		// 	rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
+		// 	// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
 
-			FallingStateInput::Fall
-        } else {
-			FallingStateInput::Stop
-		};
+		// 	FallingStateInput::Fall
+        // } else {
+		// 	FallingStateInput::Stop
+		// };
 
 		let transition = if button.is_low().unwrap() {
 			FallingStateInput::Fall
@@ -120,19 +103,30 @@ fn main() -> ! {
 
 		match machine.consume(&transition) {
 			Ok(Some(reaction)) => {
-				// Safety: Only set FALLING in this match block, elsewhere treat as-if read-only.
-				unsafe {
-					match reaction {
-						FallingStateOutput::Fall => {
-							DISPLAY.with_lock(|display| display.show(&image));
-							FALLING = true;
-						}
-						FallingStateOutput::Stop => {
-							DISPLAY.with_lock(|display| display.clear());
-							FALLING = false;
+				cortex_m::interrupt::free(|cs| {
+					if let Some(speaker) = SPEAKER.borrow(cs).borrow().as_ref() {
+						match reaction {
+							FallingStateOutput::Fall => {
+								// Update display
+								DISPLAY.with_lock(|display| display.show(&image));
+								// Update speaker
+								speaker.set_period(Hertz(BASE_FREQ));
+								speaker.enable();
+								// Restart the PWM at duty cycle
+								let max_duty = speaker.max_duty() as u32;
+								let duty = DUTY * max_duty / 100;
+								let duty = duty.clamp(1, max_duty / 2);
+								speaker.set_duty_on_common(duty as u16);
+							}
+							FallingStateOutput::Stop => {
+								// Update display
+								DISPLAY.with_lock(|display| display.clear());
+								// Update speaker
+								speaker.disable();
+							}
 						}
 					}
-				}
+				});
 			}
 			_ => { /* Do nothing */ }
 		}
@@ -142,38 +136,4 @@ fn main() -> ! {
 #[interrupt]
 fn TIMER1() {
     DISPLAY.with_lock(|display| display.handle_display_event());
-}
-
-// RTC interrupt, exectued for each RTC tick
-// https://github.com/pdx-cs-rust-embedded/mb2-audio-experiments/blob/v2-speaker-demo/src/main.rs
-#[interrupt]
-fn RTC0() {
-    /* Enter critical section */
-    cortex_m::interrupt::free(|cs| {
-        /* Borrow devices */
-        if let (Some(speaker), Some(rtc)) = (
-            SPEAKER.borrow(cs).borrow().as_ref(),
-            RTC.borrow(cs).borrow().as_ref(),
-        ) {
-			// Safety: FALLING should be considered read-only.
-			unsafe {
-				if FALLING {
-					rprintln!("FALLING");
-					speaker.set_period(Hertz(BASE_FREQ));
-					speaker.enable();
-					// Restart the PWM at duty cycle
-					let max_duty = speaker.max_duty() as u32;
-					let duty = DUTY * max_duty / 100;
-					let duty = duty.clamp(1, max_duty / 2);
-					speaker.set_duty_on_common(duty as u16);
-				} else {
-					rprintln!("STILL");
-					speaker.disable();
-				}
-			}
-
-            // Clear the RTC interrupt
-            rtc.reset_event(RtcInterrupt::Tick);
-        }
-    });
 }
