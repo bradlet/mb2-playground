@@ -4,7 +4,7 @@ use microbit::display::nonblocking::GreyscaleImage;
 
 pub use rust_fsm::*;
 
-pub const TICK: u16 = 750;
+pub const TICK: u16 = 500;
 pub const BASE_FREQ: u32 = 700;
 pub const DUTY: u32 = 1000;
 pub const GEES: i32 = 2; // Just played around with this for a bit until decently responsive.
