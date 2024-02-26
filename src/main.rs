@@ -58,7 +58,7 @@ fn main() -> ! {
 
 	let image = get_default_grayscale_image();
 
-	// Copied here https://github.com/pdx-cs-rust-embedded/mb2-audio-experiments/blob/v2-speaker-demo/src/main.rs
+	// https://github.com/pdx-cs-rust-embedded/mb2-audio-experiments/blob/v2-speaker-demo/src/main.rs
 	cortex_m::interrupt::free(move |cs| {
         // NB: The LF CLK pin is used by the speaker
         let _clocks = Clocks::new(board.CLOCK)
@@ -98,20 +98,19 @@ fn main() -> ! {
         }
         pac::NVIC::unpend(pac::Interrupt::RTC0);
     });
-	// Copy end here
 
 	loop {
 		// https://crates.io/crates/lsm303agr/0.3.0
-		// let transition = if sensor.accel_status().unwrap().xyz_new_data() {
-        //     let data = sensor.acceleration().unwrap();
-		// 	// Acceleration in milli-g
-		// 	rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
-		// 	// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
-        //     // rprintln!("Linear acceleration: {}", linear_acceleration_sq);
-		// 	FallingStateInput::Fall
-        // } else {
-		// 	FallingStateInput::Stop
-		// };
+		let transition = if sensor.accel_status().unwrap().xyz_new_data() {
+            let data = sensor.acceleration().unwrap();
+			// Acceleration in milli-g
+			rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
+			// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
+
+			FallingStateInput::Fall
+        } else {
+			FallingStateInput::Stop
+		};
 
 		let transition = if button.is_low().unwrap() {
 			FallingStateInput::Fall
@@ -121,17 +120,15 @@ fn main() -> ! {
 
 		match machine.consume(&transition) {
 			Ok(Some(reaction)) => {
-				match reaction {
-					FallingStateOutput::Fall => {
-						DISPLAY.with_lock(|display| display.show(&image));
-						// make_sin_wave(&mut speaker, &mut timer);
-						unsafe {
+				// Safety: Only set FALLING in this match block, elsewhere treat as-if read-only.
+				unsafe {
+					match reaction {
+						FallingStateOutput::Fall => {
+							DISPLAY.with_lock(|display| display.show(&image));
 							FALLING = true;
 						}
-					}
-					FallingStateOutput::Stop => {
-						DISPLAY.with_lock(|display| display.clear());
-						unsafe {
+						FallingStateOutput::Stop => {
+							DISPLAY.with_lock(|display| display.clear());
 							FALLING = false;
 						}
 					}
@@ -158,6 +155,7 @@ fn RTC0() {
             SPEAKER.borrow(cs).borrow().as_ref(),
             RTC.borrow(cs).borrow().as_ref(),
         ) {
+			// Safety: FALLING should be considered read-only.
 			unsafe {
 				if FALLING {
 					rprintln!("FALLING");
