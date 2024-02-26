@@ -3,6 +3,9 @@
 #![no_std]
 #![no_main]
 
+use core::cell::RefCell;
+
+use cortex_m::interrupt::Mutex;
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
 
@@ -12,11 +15,7 @@ use microbit::{
 	board::Board,
 	display::nonblocking::Display,
 	hal::{
-		pac::{self, TIMER1, interrupt},
-		prelude::*,
-		Timer,
-		gpio::Level,
-		twim,
+		gpio::Level, pac::{self, interrupt, TIMER1}, prelude::*, pwm, twim, Rtc, Timer
 	},
 	pac::twim0::frequency::FREQUENCY_A
 };
@@ -28,6 +27,8 @@ use mb2_playground::*;
 /// The display is shared by the main program and the
 /// interrupt handler.
 static DISPLAY: LockMut<Display<TIMER1>> = LockMut::new();
+static RTC: Mutex<RefCell<Option<Rtc<pac::RTC0>>>> = Mutex::new(RefCell::new(None));
+static SPEAKER: Mutex<RefCell<Option<pwm::Pwm<pac::PWM0>>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -54,7 +55,6 @@ fn main() -> ! {
         pac::NVIC::unmask(pac::Interrupt::TIMER1);
     }
 
-	let mut last_state = &FallingStateState::Still;
 	let mut machine: StateMachine<FallingState> = StateMachine::new();
 	
 	rprintln!("Starting...");
@@ -92,7 +92,7 @@ fn main() -> ! {
 					}
 				}
 			}
-			_ => { /* Do nothing */}
+			_ => { /* Do nothing */ }
 		}
 	}
 }
