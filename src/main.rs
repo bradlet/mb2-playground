@@ -29,11 +29,6 @@ static SPEAKER: Mutex<RefCell<Option<pwm::Pwm<pac::PWM0>>>> = Mutex::new(RefCell
 
 static mut FALLING: bool = false;
 
-// Stop frequency in Hertz.
-const STOP_FREQUENCY: u32 = 500;
-// Time to hold at stop frequency in seconds.
-const HOLD_TIME: u32 = 5;
-
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
@@ -63,7 +58,7 @@ fn main() -> ! {
 
 	let image = get_default_grayscale_image();
 
-	// Copied here
+	// Copied here https://github.com/pdx-cs-rust-embedded/mb2-audio-experiments/blob/v2-speaker-demo/src/main.rs
 	cortex_m::interrupt::free(move |cs| {
         // NB: The LF CLK pin is used by the speaker
         let _clocks = Clocks::new(board.CLOCK)
@@ -87,26 +82,13 @@ fn main() -> ! {
         speaker
             // output the waveform on the speaker pin
             .set_output_pin(pwm::Channel::C0, speaker_pin.degrade())
-            // Use prescale by 16 to achive darker sounds
-            .set_prescaler(pwm::Prescaler::Div16)
+            .set_prescaler(pwm::Prescaler::Div4)
             // Initial frequency
-            .set_period(Hertz(BASE_FREQ))
-            // Configure for up and down counter mode
-            .set_counter_mode(pwm::CounterMode::UpAndDown)
-            // Set initial maximum duty cycle. This will immediately
-            // be changed in the interrupt handler.
-            .set_max_duty(32767)
-            // enable PWM
-            .enable();
-
-        speaker
+			.set_period(Hertz(BASE_FREQ))
             .set_seq_refresh(pwm::Seq::Seq0, 0)
-            .set_seq_end_delay(pwm::Seq::Seq0, 0);
-
-        // Configure initial duty cycle to 50%. This will
-        // immediately be changed in the interrupt handler.
-        let max_duty = speaker.max_duty();
-        speaker.set_duty_on_common(max_duty / 2);
+            .set_seq_end_delay(pwm::Seq::Seq0, 0)
+            .set_max_duty(32767)
+			.disable();
 
         *SPEAKER.borrow(cs).borrow_mut() = Some(speaker);
 
@@ -116,7 +98,7 @@ fn main() -> ! {
         }
         pac::NVIC::unpend(pac::Interrupt::RTC0);
     });
-	// To here
+	// Copy end here
 
 	loop {
 		// https://crates.io/crates/lsm303agr/0.3.0
@@ -166,6 +148,7 @@ fn TIMER1() {
 }
 
 // RTC interrupt, exectued for each RTC tick
+// https://github.com/pdx-cs-rust-embedded/mb2-audio-experiments/blob/v2-speaker-demo/src/main.rs
 #[interrupt]
 fn RTC0() {
     /* Enter critical section */
@@ -177,18 +160,19 @@ fn RTC0() {
         ) {
 			unsafe {
 				if FALLING {
+					rprintln!("FALLING");
 					speaker.set_period(Hertz(BASE_FREQ));
 					speaker.enable();
+					// Restart the PWM at duty cycle
+					let max_duty = speaker.max_duty() as u32;
+					let duty = DUTY * max_duty / 100;
+					let duty = duty.clamp(1, max_duty / 2);
+					speaker.set_duty_on_common(duty as u16);
 				} else {
+					rprintln!("STILL");
 					speaker.disable();
 				}
 			}
-
-            // Restart the PWM at duty cycle
-            let max_duty = speaker.max_duty() as u32;
-            let duty = DUTY * max_duty / 100;
-            let duty = duty.clamp(1, max_duty / 2);
-            speaker.set_duty_on_common(duty as u16);
 
             // Clear the RTC interrupt
             rtc.reset_event(RtcInterrupt::Tick);
