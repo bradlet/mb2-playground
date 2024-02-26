@@ -42,8 +42,6 @@ fn main() -> ! {
 	sensor.init().unwrap();
 	sensor.set_accel_mode_and_odr(&mut timer, AccelMode::Normal, AccelOutputDataRate::Hz50).unwrap();
 
-    let button = board.buttons.button_a; // TODO remove
-
 	unsafe {
         board.NVIC.set_priority(pac::Interrupt::TIMER1, 128);
         pac::NVIC::unmask(pac::Interrupt::TIMER1);
@@ -84,20 +82,22 @@ fn main() -> ! {
 
 	loop {
 		// https://crates.io/crates/lsm303agr/0.3.0
-		// let transition = if sensor.accel_status().unwrap().xyz_new_data() {
-        //     let data = sensor.acceleration().unwrap();
-		// 	// Acceleration in milli-g
-		// 	rprintln!("Acceleration [x, y, z]: [{}, {}, {}]", data.x_mg(), data.y_mg(), data.z_mg());
-		// 	// let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
+		let transition = if sensor.accel_status().unwrap().xyz_new_data() {
+            let data = sensor.acceleration().unwrap();
 
-		// 	FallingStateInput::Fall
-        // } else {
-		// 	FallingStateInput::Stop
-		// };
+			// Acceleration in milli-g
+			let linear_acceleration_sq = data.x_mg() * data.x_mg() + data.y_mg() * data.y_mg() + data.z_mg() * data.z_mg();
+			rprintln!("Accel: {}", linear_acceleration_sq);
 
-		let transition = if button.is_low().unwrap() {
-			FallingStateInput::Fall
-		} else {
+			// Because we are squaring the right-hand side of the acceleration equation,
+			// the conversion to regular gravity G's (GEES) is 10^-6.
+			let threshold = GEES * 1_000_000;
+			if linear_acceleration_sq > threshold {
+				FallingStateInput::Fall
+			} else {
+				FallingStateInput::Stop
+			}
+        } else {
 			FallingStateInput::Stop
 		};
 
@@ -130,6 +130,7 @@ fn main() -> ! {
 			}
 			_ => { /* Do nothing */ }
 		}
+		timer.delay_ms(TICK);
 	}
 }
 
